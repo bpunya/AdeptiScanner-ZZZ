@@ -9,11 +9,311 @@ using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 using Tesseract;
+using SixLabors.ImageSharp.PixelFormats;
 
 namespace AdeptiScanner_ZZZ
 {
     class ImageProcessing
     {
+        private const int AgentAnchorX = 16;
+        private const int AgentAnchorY = 72;
+        private const int AgentAnchorSize = 36;
+        private const int AgentAnchorSampleSize = 12;
+        private const int AgentReferenceAreaWidth = 425;
+        private const int AgentReferenceAreaHeight = 576;
+        private const double AgentPortraitCenterOffset = 39;
+        private const int PortraitSampleSize = 16;
+        private static readonly bool[] agentAnchorSampleMask = Enumerable.Range(0, AgentAnchorSampleSize * AgentAnchorSampleSize)
+            .Select(i =>
+            {
+                int x = i % AgentAnchorSampleSize;
+                int y = i / AgentAnchorSampleSize;
+                bool nearHorizontalEdge = y < 2 || y >= AgentAnchorSampleSize - 2;
+                bool nearVerticalEdge = x < 2 || x >= AgentAnchorSampleSize - 2;
+                return (nearHorizontalEdge || nearVerticalEdge) && !(nearHorizontalEdge && nearVerticalEdge);
+            })
+            .ToArray();
+        private static readonly bool[] portraitSampleMask = Enumerable.Range(0, PortraitSampleSize * PortraitSampleSize)
+            .Select(i =>
+            {
+                int x = i % PortraitSampleSize;
+                int y = i / PortraitSampleSize;
+                double dx = (x + 0.5 - PortraitSampleSize / 2d) / PortraitSampleSize;
+                double dy = (y + 0.5 - PortraitSampleSize / 2d) / PortraitSampleSize;
+                return dx * dx + dy * dy <= 0.45 * 0.45;
+            })
+            .ToArray();
+        private static readonly Lazy<List<byte[]>> agentAnchorFeatures = new(() => new List<byte[]>
+        {
+            Convert.FromBase64String(
+                "AAAAAAAACgoLhIyTjJachoyXb3V/bXB4VFlgCgoKAAAAAAAAAAAAAAAAg4qTUldbPD1CPD1CODk9Njg7U1RcQ0ZKAAAAAAAA" +
+                "Dw8PHB4gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABgYGDw8PBwcHUVdeAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAMjM2DAwM" +
+                "UVRaPkJFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAANTY5GBkaS09UTE9UAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAIyUpJyYo" +
+                "DxAQRUlPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJikmCgoKDAwMHR8iAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACgoKDAwM" +
+                "DAwMDAwMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAwMDAwMEBAQDAwMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAwMDAwM" +
+                "AAAAAAAACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLAAAAAAAAAAAAAAAAFhYWDQ0NCwsLCwsLCwsLCwsLCwsLCwsLAAAAAAAA"),
+            Convert.FromBase64String(
+                "AAAAAAAAERERAgICipSaho6WdnuCbHF5TU5TBwcHAAAAAAAAAAAAAAAAERITiJCXNDc5PUBENzg8MjU5XWNpTVFWAAAAAAAA" +
+                "EBAQDw8PAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACwsMDw8PDw8PBgYGAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAOz5CDg4O" +
+                "AgICa293AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGxscLjE2AgICbHJ5AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAFRcZKSot" +
+                "AgICR0tPAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHh8eJCMkDQ0NHyAjAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAJicmBQUF" +
+                "DQ0NDQ0NAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgICDAwMEhISDAwMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAwMDAwM" +
+                "AAAAAAAACwsLBAQEHx4fHx4fHyEgHyEjBQUFCAgIAAAAAAAAAAAAAAAAFBQUDAwMCwsLCwsLCwsLCwsLCwsLCwsLAAAAAAAA")
+        });
+        private static readonly Lazy<List<(string Key, byte[] Feature)>> agentPortraits = new(LoadAgentPortraits);
+
+        private static List<(string Key, byte[] Feature)> LoadAgentPortraits()
+        {
+            List<(string Key, byte[] Feature)> portraits = new();
+            string portraitDirectory = Path.Join(Database.appDir, "AgentPortraits");
+            if (!Directory.Exists(portraitDirectory))
+            {
+                return portraits;
+            }
+
+            foreach (string filePath in Directory.EnumerateFiles(portraitDirectory))
+            {
+                if (!string.Equals(Path.GetExtension(filePath), ".webp", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                string fileName = Path.GetFileNameWithoutExtension(filePath);
+                string key = fileName.Split('_', 2)[0];
+                if (key.Length == 0)
+                {
+                    continue;
+                }
+
+                try
+                {
+                    using var portrait = SixLabors.ImageSharp.Image.Load<Rgba32>(filePath);
+                    int cropSize = Math.Min(portrait.Width, portrait.Height);
+                    int cropX = (portrait.Width - cropSize) / 2;
+                    int cropY = (portrait.Height - cropSize) / 2;
+                    byte[] feature = new byte[PortraitSampleSize * PortraitSampleSize * 3];
+                    for (int y = 0; y < PortraitSampleSize; y++)
+                    {
+                        for (int x = 0; x < PortraitSampleSize; x++)
+                        {
+                            int sourceX = cropX + (int)((x + 0.5) * cropSize / PortraitSampleSize);
+                            int sourceY = cropY + (int)((y + 0.5) * cropSize / PortraitSampleSize);
+                            Rgba32 pixel = portrait[sourceX, sourceY];
+                            int index = (y * PortraitSampleSize + x) * 3;
+                            feature[index] = pixel.R;
+                            feature[index + 1] = pixel.G;
+                            feature[index + 2] = pixel.B;
+                        }
+                    }
+
+                    portraits.Add((key, feature));
+                }
+                catch (Exception)
+                {
+                    Debug.WriteLine("Unable to load agent portrait: " + filePath);
+                }
+            }
+
+            return portraits;
+        }
+
+        private static byte[] GetRgbPixels(Bitmap image, out int stride)
+        {
+            using Bitmap normalized = new(image.Width, image.Height, PixelFormat.Format32bppArgb);
+            using (Graphics graphics = Graphics.FromImage(normalized))
+            {
+                graphics.DrawImageUnscaled(image, 0, 0);
+            }
+
+            BitmapData imageData = normalized.LockBits(
+                new Rectangle(0, 0, normalized.Width, normalized.Height),
+                ImageLockMode.ReadOnly,
+                PixelFormat.Format32bppArgb);
+            int sourceStride = Math.Abs(imageData.Stride);
+            byte[] bgra = new byte[sourceStride * normalized.Height];
+            Marshal.Copy(imageData.Scan0, bgra, 0, bgra.Length);
+            normalized.UnlockBits(imageData);
+
+            stride = normalized.Width * 3;
+            byte[] rgb = new byte[stride * normalized.Height];
+            for (int y = 0; y < normalized.Height; y++)
+            {
+                for (int x = 0; x < normalized.Width; x++)
+                {
+                    int sourceIndex = y * sourceStride + x * 4;
+                    int targetIndex = y * stride + x * 3;
+                    rgb[targetIndex] = bgra[sourceIndex + 2];
+                    rgb[targetIndex + 1] = bgra[sourceIndex + 1];
+                    rgb[targetIndex + 2] = bgra[sourceIndex];
+                }
+            }
+
+            return rgb;
+        }
+
+        private static byte[] SampleRgb(byte[] pixels, int stride, Rectangle area, int sampleSize, bool[] mask)
+        {
+            byte[] feature = new byte[sampleSize * sampleSize * 3];
+            for (int y = 0; y < sampleSize; y++)
+            {
+                for (int x = 0; x < sampleSize; x++)
+                {
+                    int sampleIndex = y * sampleSize + x;
+                    if (mask != null && !mask[sampleIndex])
+                    {
+                        continue;
+                    }
+
+                    int sourceX = area.X + (int)((x + 0.5) * area.Width / sampleSize);
+                    int sourceY = area.Y + (int)((y + 0.5) * area.Height / sampleSize);
+                    int sourceIndex = sourceY * stride + sourceX * 3;
+                    int targetIndex = sampleIndex * 3;
+                    feature[targetIndex] = pixels[sourceIndex];
+                    feature[targetIndex + 1] = pixels[sourceIndex + 1];
+                    feature[targetIndex + 2] = pixels[sourceIndex + 2];
+                }
+            }
+
+            return feature;
+        }
+
+        private static (Rectangle Bounds, double Error)? FindAgentAnchor(byte[] pixels, int stride, Rectangle area)
+        {
+            List<byte[]> references = agentAnchorFeatures.Value;
+            Rectangle? bestBounds = null;
+            double bestError = double.MaxValue;
+            int searchLeft = area.Left;
+            int searchRight = Math.Min(area.Right, area.Left + area.Width / 3);
+            int searchTop = area.Top + area.Height * 4 / 100;
+            int searchBottom = area.Top + area.Height * 38 / 100;
+            double uiScale = Math.Min(
+                (double)area.Width / AgentReferenceAreaWidth,
+                (double)area.Height / AgentReferenceAreaHeight);
+            int scaledAnchorSize = Math.Max(1, (int)Math.Round(AgentAnchorSize * uiScale));
+
+            for (int scalePercent = 75; scalePercent <= 125; scalePercent += 5)
+            {
+                int size = scaledAnchorSize * scalePercent / 100;
+                int lastX = Math.Min(searchRight - size, area.Right - size);
+                int lastY = Math.Min(searchBottom - size, area.Bottom - size);
+                for (int y = searchTop; y <= lastY; y++)
+                {
+                    for (int x = searchLeft; x <= lastX; x++)
+                    {
+                        foreach (byte[] reference in references)
+                        {
+                            double error = 0;
+                            for (int sampleY = 0; sampleY < AgentAnchorSampleSize; sampleY++)
+                            {
+                                for (int sampleX = 0; sampleX < AgentAnchorSampleSize; sampleX++)
+                                {
+                                    int sampleIndex = sampleY * AgentAnchorSampleSize + sampleX;
+                                    if (!agentAnchorSampleMask[sampleIndex])
+                                    {
+                                        continue;
+                                    }
+
+                                    int sourceX = x + sampleX * size / AgentAnchorSampleSize;
+                                    int sourceY = y + sampleY * size / AgentAnchorSampleSize;
+                                    int sourceIndex = sourceY * stride + sourceX * 3;
+                                    int referenceIndex = sampleIndex * 3;
+                                    error += Math.Abs(pixels[sourceIndex] - reference[referenceIndex]);
+                                    error += Math.Abs(pixels[sourceIndex + 1] - reference[referenceIndex + 1]);
+                                    error += Math.Abs(pixels[sourceIndex + 2] - reference[referenceIndex + 2]);
+                                }
+                            }
+
+                            error /= agentAnchorSampleMask.Count(value => value) * 3;
+                            if (error < bestError)
+                            {
+                                bestError = error;
+                                bestBounds = new Rectangle(x, y, size, size);
+                            }
+                        }
+                    }
+                }
+            }
+
+            return bestBounds.HasValue ? (bestBounds.Value, bestError) : null;
+        }
+
+        public static string getEquippedCharacter(Bitmap screenshot, Rectangle? searchArea = null)
+        {
+            if (screenshot == null || agentPortraits.Value.Count == 0)
+            {
+                return "";
+            }
+
+            Rectangle bounds = searchArea.HasValue
+                ? Rectangle.Intersect(searchArea.Value, new Rectangle(0, 0, screenshot.Width, screenshot.Height))
+                : new Rectangle(0, 0, screenshot.Width, screenshot.Height);
+            if (bounds.Width < AgentAnchorSize || bounds.Height < AgentAnchorSize)
+            {
+                return "";
+            }
+
+            byte[] pixels = GetRgbPixels(screenshot, out int stride);
+            (Rectangle Bounds, double Error)? anchor = FindAgentAnchor(pixels, stride, bounds);
+            if (!anchor.HasValue || anchor.Value.Error > 48)
+            {
+                return "";
+            }
+
+            Rectangle anchorBounds = anchor.Value.Bounds;
+            int expectedPortraitCenterX = anchorBounds.X + anchorBounds.Width / 2
+                + (int)Math.Round(AgentPortraitCenterOffset * anchorBounds.Width / AgentAnchorSize);
+            string bestKey = "";
+            double bestSimilarity = double.MinValue;
+            int alignmentTolerance = Math.Max(1, (int)Math.Round(anchorBounds.Width * 2d / AgentAnchorSize));
+            for (int sizePercent = 85; sizePercent <= 110; sizePercent += 5)
+            {
+                int size = anchorBounds.Width * sizePercent / 100;
+                for (int offsetY = -alignmentTolerance; offsetY <= alignmentTolerance; offsetY++)
+                {
+                    int top = anchorBounds.Y + offsetY;
+                    for (int offsetX = -alignmentTolerance; offsetX <= alignmentTolerance; offsetX++)
+                    {
+                        int left = expectedPortraitCenterX + offsetX - size / 2;
+                        Rectangle portraitArea = new(left, top, size, size);
+                        if (portraitArea.Left < bounds.Left || portraitArea.Right > bounds.Right
+                            || portraitArea.Top < bounds.Top || portraitArea.Bottom > bounds.Bottom)
+                        {
+                            continue;
+                        }
+
+                        byte[] portraitFeature = SampleRgb(pixels, stride, portraitArea, PortraitSampleSize, portraitSampleMask);
+                        foreach ((string key, byte[] feature) in agentPortraits.Value)
+                        {
+                            double error = 0;
+                            int sampleCount = 0;
+                            for (int i = 0; i < portraitSampleMask.Length; i++)
+                            {
+                                if (!portraitSampleMask[i])
+                                {
+                                    continue;
+                                }
+
+                                int index = i * 3;
+                                error += Math.Abs(portraitFeature[index] - feature[index]);
+                                error += Math.Abs(portraitFeature[index + 1] - feature[index + 1]);
+                                error += Math.Abs(portraitFeature[index + 2] - feature[index + 2]);
+                                sampleCount += 3;
+                            }
+
+                            double similarity = 1d - error / sampleCount / 255d;
+                            if (similarity > bestSimilarity)
+                            {
+                                bestSimilarity = similarity;
+                                bestKey = key;
+                            }
+                        }
+                    }
+                }
+            }
+
+            return bestSimilarity > 0.70 ? bestKey : "";
+        }
+
         public static List<Point> getArtifactGrid(Bitmap areaImg, bool saveImages, Point coordOffset)
         {
             //Rectangle area = new Rectangle(gameArea.X, gameArea.Y, artifactArea.X - gameArea.X, gameArea.Height);
@@ -968,7 +1268,7 @@ namespace AdeptiScanner_ZZZ
         /// </summary>
         /// <param name="img">Image of artifact area, filtered</param>
         /// <param name="rows">Filter results per row</param>
-        public static Disc getDisc(Bitmap img, int[] rows, bool saveImages, TesseractEngine tessEngine)
+        public static Disc getDisc(Bitmap img, int[] rows, bool saveImages, TesseractEngine tessEngine, Bitmap sourceImage = null, Rectangle? sourceArea = null)
         {
             //get all potential text rows
             List<(int Top, int Bottom)> textRows = new();
@@ -1019,7 +1319,10 @@ namespace AdeptiScanner_ZZZ
                                 Math.Min(nextTop, (int)Math.Round(currBottom + avgHeight * 0.5)));
             }
 
-            var disc = new Disc();
+            var disc = new Disc
+            {
+                location = sourceImage == null ? "" : getEquippedCharacter(sourceImage, sourceArea)
+            };
 
             string prevRaw = "";
             int totalError = 0;

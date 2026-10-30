@@ -13,6 +13,7 @@ namespace AdeptiScanner_ZZZ
         public DiscLevelAndRarity? level;
         public DiscMainStat? main;
         public List<DiscSubStat> subs = new();
+        public string location = "";
 
         public Disc()
         {
@@ -47,13 +48,15 @@ namespace AdeptiScanner_ZZZ
                 text += sub + Environment.NewLine;
             }
 
-          
+            text += "Location: " + (location ?? "") + Environment.NewLine;
+
             return text;
         }
 
-        public JObject toZOD(bool includeLocation = true)
+        public JObject toZOD()
         {
             JObject result = new JObject();
+            result.Add("location", JToken.FromObject(location ?? ""));
 
             if (slot != null)
             {

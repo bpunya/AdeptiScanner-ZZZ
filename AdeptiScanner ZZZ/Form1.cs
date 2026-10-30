@@ -327,7 +327,7 @@ namespace AdeptiScanner_ZZZ
 
                         filtered = ImageProcessing.getDiscImg(filtered, area, out int[] rows, saveImages, localUpscaleFiltered);
 
-                        Disc item = ImageProcessing.getDisc(filtered, rows, saveImages, threadEngines[threadIndex]);
+                        Disc item = ImageProcessing.getDisc(filtered, rows, saveImages, threadEngines[threadIndex], img);
 
                         if (Database.discInvalid(item))
                         {
@@ -386,6 +386,13 @@ namespace AdeptiScanner_ZZZ
                 Rectangle gridArea = new Rectangle(savedGameArea.X, savedGameArea.Y, savedDiscArea.X - savedGameArea.X, savedGameArea.Height);
                 Point gridOffset = new Point(gridArea.X, gridArea.Y);
 
+                void scrollGrid(int amount)
+                {
+                    System.Windows.Forms.Cursor.Position = new Point(gridArea.X + gridArea.Width / 2, gridArea.Y + gridArea.Height / 2);
+                    sim.Mouse.VerticalScroll(amount);
+                }
+                const int scrollStep = 1;
+
                 GameVisibilityHandler.bringGameToFront();
 
                 //make sure cursor is on the correct screen
@@ -411,10 +418,9 @@ namespace AdeptiScanner_ZZZ
                 }
                 else
                 {
-                    // more than 2 rows, need precautions in case clicking top row will scroll us
                     currRowNum = 1;
                     topScrollConfirmation = TopScrollConfirmationStage.FirstPass;
-                    AppendStatusText("Checking if upwards scroll is possible" + Environment.NewLine, false);
+                    AppendStatusText("Scrolling artifact list to top" + Environment.NewLine, false);
                 }
 
                 while (currRowNum < rowCount && equalizedGrid[currRowNum].Count > 0)
@@ -497,53 +503,47 @@ namespace AdeptiScanner_ZZZ
 
                     bool enqueue;
                     bool increment;
-                    int? sleepRowTarget;
+                    int scrollAmount;
                     if (topScrollConfirmation is TopScrollConfirmationStage.FirstPass)
                     {
-                        // Checking if clicking first row causes scroll
-                        // First pass is just to set up lastRowHash for second pass.
                         enqueue = false;
                         increment = false;
-                        sleepRowTarget = 0;
+                        scrollAmount = scrollStep;
                         topScrollConfirmation = TopScrollConfirmationStage.SecondPass;
                     }
                     else if (topScrollConfirmation is TopScrollConfirmationStage.SecondPass)
                     {
-                        // Checking if clicking first row caused scroll
                         if (thisRowHash == lastRowHash)
                         {
-                            // No scroll, start on row 0 and ignore these results
+                            // No movement means the list has reached the top.
                             enqueue = false;
                             increment = false;
-                            sleepRowTarget = null;
+                            scrollAmount = 0;
                             currRowNum = 0;
+                            topScrollConfirmation = TopScrollConfirmationStage.Done;
                         } 
                         else
                         {
-                            // Scroll happened! This was the top row on first pass, so keep results and go down from here
-                            enqueue = true;
-                            increment = true;
-                            sleepRowTarget = null;
+                            enqueue = false;
+                            increment = false;
+                            scrollAmount = scrollStep;
                         }
-                        // Now good to go for normal operations
-                        topScrollConfirmation = TopScrollConfirmationStage.Done;
                     }
                     else if (currRowNum == rowCount - 2 && rowCount > 2)
                     {
-                        // Second-to-last row on screen may be repeatedly used, as clicking final row may scroll
                         if (thisRowHash == lastRowHash)
                         {
                             // Results repeated, stop repeating row
                             enqueue = false;
                             increment = true;
-                            sleepRowTarget = null;
+                            scrollAmount = 0;
                         }
                         else
                         {
-                            // Results differ, click final row to scroll, but repeat this row for now
+                            // Results differ, scroll down but repeat this row for now.
                             enqueue = true;
                             increment = false;
-                            sleepRowTarget = currRowNum + 1;
+                            scrollAmount = -scrollStep;
                         }
                     }
                     else
@@ -551,7 +551,7 @@ namespace AdeptiScanner_ZZZ
                         // Rows without possible scrolling to account for
                         enqueue = true;
                         increment = true;
-                        sleepRowTarget = null;
+                        scrollAmount = 0;
                     }
 
                     lastRowHash = thisRowHash;
@@ -580,10 +580,9 @@ namespace AdeptiScanner_ZZZ
                         }
                     }
 
-                    if (sleepRowTarget.HasValue)
+                    if (scrollAmount != 0)
                     {
-                        Point p = equalizedGrid[sleepRowTarget.Value][0];
-                        clickPos(p.X, p.Y);
+                        scrollGrid(scrollAmount);
                         System.Threading.Thread.Sleep(scrollSleepWait);
                     }
 
@@ -640,7 +639,7 @@ namespace AdeptiScanner_ZZZ
                     string timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH-mm-ssff");
                     filtered.Save(Path.Join(Database.appDir, "images", "GenshinArtifactImg_" + timestamp + ".png"));
                     filtered = ImageProcessing.getDiscImg(filtered, area, out int[] rows, true, localUpscaleFiltered);
-                    Disc item = ImageProcessing.getDisc(filtered, rows, true, tessEngine);
+                    Disc item = ImageProcessing.getDisc(filtered, rows, true, tessEngine, img);
                     AppendStatusText(item.ToString() + Environment.NewLine, false);
                 }
 
@@ -867,7 +866,7 @@ namespace AdeptiScanner_ZZZ
             }
 
             img_Filtered = ImageProcessing.getDiscImg(img_Filtered, readArea, out filtered_rows, saveImages, upscaleFiltered);
-            Disc disc = ImageProcessing.getDisc(img_Filtered, filtered_rows, saveImages, tessEngine);
+            Disc disc = ImageProcessing.getDisc(img_Filtered, filtered_rows, saveImages, tessEngine, img_Raw, relativeDiscArea);
             if (Database.discInvalid(disc))
             {
                 displayInventoryItem(disc);
