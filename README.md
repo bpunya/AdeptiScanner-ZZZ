@@ -103,3 +103,6 @@ You're now ready for manual or automatic artifact scanning
 - Some functions used are heavily based on code from [WFInfo](https://github.com/WFCD/WFinfo), an OCR-based companion program for Warframe
 - The tesseract model used was trained and provided by the creator of [this similar program](https://github.com/Andrewthe13th/Genshin_Scanner)
 - The main purpose of this scanner is to more easily import your artifacts into [Genshin Optimizer](https://frzyc.github.io/genshin-optimizer/), but it should be compatible with any other program that uses the GOOD format
+
+## License
+This project is licensed under the Apache License, Version 2.0. See [APACHE-2-LICENSE.txt](APACHE-2-LICENSE.txt).

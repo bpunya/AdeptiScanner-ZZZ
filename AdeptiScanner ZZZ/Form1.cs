@@ -866,7 +866,7 @@ namespace AdeptiScanner_ZZZ
             }
 
             img_Filtered = ImageProcessing.getDiscImg(img_Filtered, readArea, out filtered_rows, saveImages, upscaleFiltered);
-            Disc disc = ImageProcessing.getDisc(img_Filtered, filtered_rows, saveImages, tessEngine, img_Raw, relativeDiscArea);
+            Disc disc = ImageProcessing.getDisc(img_Filtered, filtered_rows, saveImages, tessEngine, img_Raw, readArea);
             if (Database.discInvalid(disc))
             {
                 displayInventoryItem(disc);

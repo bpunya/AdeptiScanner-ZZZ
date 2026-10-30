@@ -8,8 +8,8 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
+using ImageMagick;
 using Tesseract;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace AdeptiScanner_ZZZ
 {
@@ -87,10 +87,13 @@ namespace AdeptiScanner_ZZZ
 
                 try
                 {
-                    using var portrait = SixLabors.ImageSharp.Image.Load<Rgba32>(filePath);
-                    int cropSize = Math.Min(portrait.Width, portrait.Height);
-                    int cropX = (portrait.Width - cropSize) / 2;
-                    int cropY = (portrait.Height - cropSize) / 2;
+                    using var portrait = new MagickImage(filePath);
+                    int width = checked((int)portrait.Width);
+                    int height = checked((int)portrait.Height);
+                    int cropSize = Math.Min(width, height);
+                    int cropX = (width - cropSize) / 2;
+                    int cropY = (height - cropSize) / 2;
+                    byte[] rgbPixels = portrait.GetPixels().ToByteArray(PixelMapping.RGB);
                     byte[] feature = new byte[PortraitSampleSize * PortraitSampleSize * 3];
                     for (int y = 0; y < PortraitSampleSize; y++)
                     {
@@ -98,11 +101,11 @@ namespace AdeptiScanner_ZZZ
                         {
                             int sourceX = cropX + (int)((x + 0.5) * cropSize / PortraitSampleSize);
                             int sourceY = cropY + (int)((y + 0.5) * cropSize / PortraitSampleSize);
-                            Rgba32 pixel = portrait[sourceX, sourceY];
+                            int sourceIndex = (sourceY * width + sourceX) * 3;
                             int index = (y * PortraitSampleSize + x) * 3;
-                            feature[index] = pixel.R;
-                            feature[index + 1] = pixel.G;
-                            feature[index + 2] = pixel.B;
+                            feature[index] = rgbPixels[sourceIndex];
+                            feature[index + 1] = rgbPixels[sourceIndex + 1];
+                            feature[index + 2] = rgbPixels[sourceIndex + 2];
                         }
                     }
 

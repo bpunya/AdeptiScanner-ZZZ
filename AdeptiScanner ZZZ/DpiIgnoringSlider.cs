@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
@@ -57,6 +58,7 @@ namespace AdeptiScanner_ZZZ
         #endregion // events
 
         #region properties
+        [DefaultValue(1)]
         public int TickInterval
         {
             get => m_TickInterval; 
@@ -72,6 +74,7 @@ namespace AdeptiScanner_ZZZ
             }
         }
 
+        [DefaultValue(-1)]
         public int MinValue
         {
             get => m_MinValue;
@@ -87,6 +90,7 @@ namespace AdeptiScanner_ZZZ
             }
         }
 
+        [DefaultValue(1)]
         public int MaxValue
         {
             get => m_MaxValue;
@@ -102,6 +106,7 @@ namespace AdeptiScanner_ZZZ
             }
         }
 
+        [DefaultValue(0)]
         public int Value
         {
             get => m_Value;

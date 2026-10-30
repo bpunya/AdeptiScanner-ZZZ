@@ -33,7 +33,6 @@ namespace AdeptiScanner_ZZZ
             btn_capture = new System.Windows.Forms.Button();
             btn_OCR = new System.Windows.Forms.Button();
             text_full = new System.Windows.Forms.TextBox();
-            label_full = new System.Windows.Forms.Label();
             checkbox_OCRcapture = new System.Windows.Forms.CheckBox();
             checkbox_saveImages = new System.Windows.Forms.CheckBox();
             button_auto = new System.Windows.Forms.Button();
@@ -126,25 +125,14 @@ namespace AdeptiScanner_ZZZ
             // text_full
             // 
             text_full.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Right;
-            text_full.Location = new System.Drawing.Point(479, 332);
+            text_full.Location = new System.Drawing.Point(445, 332);
             text_full.Margin = new System.Windows.Forms.Padding(4, 3, 4, 3);
             text_full.Multiline = true;
             text_full.Name = "text_full";
             text_full.ReadOnly = true;
             text_full.ScrollBars = System.Windows.Forms.ScrollBars.Vertical;
-            text_full.Size = new System.Drawing.Size(421, 330);
+            text_full.Size = new System.Drawing.Size(455, 330);
             text_full.TabIndex = 20;
-            // 
-            // label_full
-            // 
-            label_full.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
-            label_full.AutoSize = true;
-            label_full.Location = new System.Drawing.Point(445, 335);
-            label_full.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
-            label_full.Name = "label_full";
-            label_full.Size = new System.Drawing.Size(26, 15);
-            label_full.TabIndex = 20;
-            label_full.Text = "Full";
             // 
             // checkbox_OCRcapture
             // 
@@ -701,7 +689,6 @@ namespace AdeptiScanner_ZZZ
             Controls.Add(flowLayoutPanel1);
             Controls.Add(tableLayoutPanel4);
             Controls.Add(tabControl1);
-            Controls.Add(label_full);
             Controls.Add(text_full);
             Controls.Add(image_preview);
             Font = new System.Drawing.Font("Segoe UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Pixel);
@@ -732,7 +719,6 @@ namespace AdeptiScanner_ZZZ
         private System.Windows.Forms.Button btn_capture;
         private System.Windows.Forms.Button btn_OCR;
         private System.Windows.Forms.TextBox text_full;
-        private System.Windows.Forms.Label label_full;
         private System.Windows.Forms.CheckBox checkbox_OCRcapture;
         private System.Windows.Forms.CheckBox checkbox_saveImages;
         private System.Windows.Forms.Button button_auto;
